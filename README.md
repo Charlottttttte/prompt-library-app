@@ -25,15 +25,28 @@ Auth is intentionally out of scope — this is a single-user tool.
 
 ## Getting started
 
+Needs Node 20.9+ and a Postgres. If you have Docker, the bundled compose file
+gives you one and nothing else is hosted:
+
 ```bash
 npm install
-cp .env.example .env.local   # then fill in DATABASE_URL
-npm run db:migrate           # apply migrations
-npm run db:seed              # optional: a few example prompts
+docker compose up -d                 # Postgres on localhost:5433
+
+cp .env.example .env.local
+# then set, for the compose database:
+#   DATABASE_URL="postgresql://postgres:postgres@localhost:5433/prompt_library"
+
+npm run db:migrate                   # create the tables
+npm run db:seed                      # optional: a few example prompts
 npm run dev
 ```
 
-Open http://localhost:3000.
+Open http://localhost:3000. The AI optimize panel needs `OPENAI_API_KEY`, but
+everything else — saving, folders, tags, search, version history — works
+without it.
+
+Already have a Postgres, or using Neon/Supabase? Skip the compose step and
+point `DATABASE_URL` at it instead.
 
 ## Environment variables
 
