@@ -3,6 +3,7 @@
  * Writes through Drizzle directly, so it needs no running server.
  *   DATABASE_URL=... npx tsx scripts/seed.ts
  */
+import "./load-env";
 import { db } from "../src/db";
 import {
   categories,

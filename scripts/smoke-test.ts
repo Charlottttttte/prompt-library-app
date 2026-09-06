@@ -3,6 +3,7 @@
  * Postgres instance. Run with:
  *   DATABASE_URL=... npx tsx scripts/smoke-test.ts
  */
+import "./load-env";
 import { eq } from "drizzle-orm";
 import { db } from "../src/db";
 import {

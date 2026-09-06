@@ -1,4 +1,5 @@
 import type { Config } from "drizzle-kit";
+import "./scripts/load-env";
 
 /**
  * Migrations must run over a DIRECT connection. Neon's pooled endpoint (and

@@ -16,6 +16,7 @@
     "test:optimize-ui": "node scripts/ui-optimize-check.mjs",
     "mock:openai": "node scripts/mock-openai.mjs",
     "db:seed": "tsx scripts/seed.ts",
+    "db:check": "tsx scripts/db-check.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",

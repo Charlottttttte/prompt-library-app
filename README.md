@@ -45,8 +45,45 @@ Open http://localhost:3000. The AI optimize panel needs `OPENAI_API_KEY`, but
 everything else — saving, folders, tags, search, version history — works
 without it.
 
-Already have a Postgres, or using Neon/Supabase? Skip the compose step and
-point `DATABASE_URL` at it instead.
+Check the setup at any time — it reports whether each URL connects, whether the
+migrations have run, and whether the pooled and direct strings ended up in the
+right variables:
+
+```bash
+npm run db:check
+```
+
+### Using Neon instead of Docker
+
+Neon needs no GitHub account and no deployment — it's just a hosted database you
+point `DATABASE_URL` at. Doing it now rather than later means the prompts you
+save today are the ones your deployed app will have.
+
+1. Create a project at [neon.tech](https://neon.tech). Any region; the free tier
+   is enough.
+2. In **Connection Details**, copy the connection string **twice** — once with
+   the *Connection pooling* toggle on, once with it off. They differ by
+   `-pooler` in the hostname.
+3. Put them in `.env.local`:
+
+   ```bash
+   # pooled — the app
+   DATABASE_URL="postgresql://…@ep-xxx-pooler.region.aws.neon.tech/neondb?sslmode=require"
+   # direct — migrations only
+   DATABASE_URL_UNPOOLED="postgresql://…@ep-xxx.region.aws.neon.tech/neondb?sslmode=require"
+   ```
+
+4. `npm run db:check`, then `npm run db:migrate` and `npm run db:seed`.
+
+Two strings because migrations can't run over a pooled connection: Neon's
+pooled endpoint runs PgBouncer in transaction mode, which drops the
+session-level statements migration tools depend on. `drizzle.config.ts` uses
+`DATABASE_URL_UNPOOLED` when it's set, and the app always uses the pooled one.
+These are the variable names Neon's own Vercel integration provisions, so
+deploying later needs no rename.
+
+On the free tier the compute suspends after a few minutes idle and takes a
+moment to wake — a slow first page load is that, not the app.
 
 ## Environment variables
 
@@ -76,6 +113,7 @@ point `DATABASE_URL` at it instead.
 | `npm run db:generate`    | Generate a migration from the schema           |
 | `npm run db:migrate`     | Apply pending migrations                       |
 | `npm run db:seed`        | Insert example folders, tags, and prompts      |
+| `npm run db:check`       | Verify the database URLs, connection, and migrations |
 | `npm run db:studio`      | Drizzle Studio                                 |
 
 `test:api` and `test:ui` expect an **empty** database and a running dev server.
