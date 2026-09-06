@@ -81,6 +81,7 @@ export function PromptForm({
           placeholder="Write the prompt here. Use {{placeholders}} for the parts you swap out each time."
           required
           rows={14}
+          aria-describedby="content-hint"
           className={`${inputStyles} resize-y font-mono leading-relaxed`}
         />
         <FieldError message={state?.fields?.content} />
@@ -96,6 +97,7 @@ export function PromptForm({
           defaultValue={initial?.notes ?? ""}
           placeholder="When to reach for this prompt, what works well, what to watch out for."
           rows={3}
+          aria-describedby="notes-hint"
           className={`${inputStyles} resize-y`}
         />
         <FieldError message={state?.fields?.notes} />
@@ -127,6 +129,7 @@ export function PromptForm({
             id="newCategories"
             name="newCategories"
             placeholder="marketing, drafting"
+            aria-describedby="newCategories-hint"
             className={inputStyles}
           />
         </div>

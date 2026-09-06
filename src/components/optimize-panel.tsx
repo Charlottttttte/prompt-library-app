@@ -84,7 +84,7 @@ export function OptimizePanel({ promptId }: Props) {
           {error.message}
           {error.needsSetup && (
             <p className="mt-1 font-mono text-xs opacity-80">
-              ANTHROPIC_API_KEY=sk-ant-…
+              OPENAI_API_KEY=sk-…
             </p>
           )}
         </div>

@@ -119,7 +119,7 @@ echo "Optimize"
 RESP=$(curl -sS -w '\n%{http_code}' -X POST "$BASE/api/prompts/$PROMPT_ID/optimize" \
   -H 'content-type: application/json' -d '{}')
 CODE=$(echo "$RESP" | tail -1); BODY=$(echo "$RESP" | sed '$d')
-if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+if [ -n "${OPENAI_API_KEY:-}" ]; then
   check "POST optimize returns a suggestion" 200 "$CODE"
   HAS=$(echo "$BODY" | jsonfield "['optimized'].__class__.__name__")
   check "the suggestion carries rewritten text" str "$HAS"

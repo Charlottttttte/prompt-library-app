@@ -19,7 +19,7 @@ Tracked in Linear: [Prompt Library App](https://linear.app/minglin/project/promp
 | Database  | Postgres                                      |
 | ORM       | Drizzle ORM + `postgres` driver              |
 | Validation| Zod                                           |
-| AI        | Anthropic Messages API (model configurable)  |
+| AI        | OpenAI Chat Completions, strict JSON schema  |
 
 Auth is intentionally out of scope — this is a single-user tool.
 
@@ -37,11 +37,13 @@ Open http://localhost:3000.
 
 ## Environment variables
 
-| Variable            | Required | Purpose                                              |
-| ------------------- | -------- | ---------------------------------------------------- |
-| `DATABASE_URL`      | yes      | Postgres connection string (Supabase, Neon, Vercel…)  |
-| `ANTHROPIC_API_KEY` | for AI   | Enables "Optimize with AI". Without it the app works fully; the optimize panel just explains the key is missing. |
-| `OPTIMIZER_MODEL`   | no       | Defaults to `claude-sonnet-5`.                        |
+| Variable                | Required | Purpose                                          |
+| ----------------------- | -------- | ------------------------------------------------ |
+| `DATABASE_URL`          | yes      | Postgres connection string. Use the **pooled** string on Neon/Supabase. |
+| `DATABASE_URL_UNPOOLED` | pooled providers | Direct string, used only for migrations. Pooled connections run in transaction mode and can't run them. Neon's Vercel integration sets this for you. |
+| `OPENAI_API_KEY`        | for AI   | Enables "Optimize with AI". Without it the app works fully; the optimize panel just explains the key is missing. Never prefix with `NEXT_PUBLIC_`. |
+| `OPTIMIZER_MODEL`       | no       | Defaults to `gpt-5.6-terra`.                      |
+| `OPENAI_BASE_URL`       | no       | Point at any OpenAI-compatible endpoint (Azure OpenAI, OpenRouter, a local server). Defaults to `https://api.openai.com/v1`. |
 
 ## Scripts
 
@@ -55,12 +57,28 @@ Open http://localhost:3000.
 | `npm run test:optimizer` | Unit tests for optimizer response parsing      |
 | `npm run test:api`       | End-to-end HTTP tests (needs the dev server)   |
 | `npm run test:ui`        | Browser tests via Playwright                   |
+| `npm run mock:openai`    | Stand-in OpenAI server for the two below       |
+| `npm run test:optimize-api` | Optimizer over HTTP, all failure paths      |
+| `npm run test:optimize-ui`  | Optimize → review → accept in the browser   |
 | `npm run db:generate`    | Generate a migration from the schema           |
 | `npm run db:migrate`     | Apply pending migrations                       |
 | `npm run db:seed`        | Insert example folders, tags, and prompts      |
 | `npm run db:studio`      | Drizzle Studio                                 |
 
 `test:api` and `test:ui` expect an **empty** database and a running dev server.
+
+The two `optimize-*` suites run against `scripts/mock-openai.mjs` rather than the
+real API, so they cost nothing and can assert the failure paths (bad key, rate
+limit, refusal, truncation, unparseable output) that are hard to trigger for
+real. The mock also asserts the request the app sends — auth header, message
+roles, and a strict JSON schema — so a broken request shape fails the test
+rather than surfacing as a confusing 400 in production. Run them with:
+
+```bash
+npm run mock:openai &
+OPENAI_API_KEY=anything OPENAI_BASE_URL=http://localhost:4010/v1 npm run dev
+npm run db:seed && npm run test:optimize-api && npm run test:optimize-ui
+```
 
 ## Data model
 
@@ -106,11 +124,19 @@ Filtering by several tags at once narrows to prompts carrying **all** of them.
 
 ## Optimize with AI
 
-`POST /api/prompts/[id]/optimize` sends the prompt to the Anthropic Messages API
-and returns `{ original, optimized, changes[], model }`. It deliberately does
-**not** write anything — the UI shows the current and suggested text side by
+`POST /api/prompts/[id]/optimize` sends the prompt to OpenAI's Chat Completions
+endpoint and returns `{ original, optimized, changes[], model }`. It deliberately
+does **not** write anything — the UI shows the current and suggested text side by
 side, and only an explicit "Accept and save" records an `optimized` version.
 An unwanted rewrite can never silently replace what you wrote.
+
+The request uses [strict structured outputs](https://developers.openai.com/api/docs/guides/structured-outputs),
+so the API itself enforces the response schema rather than the app hoping the
+model returns valid JSON. The defensive parser in `src/lib/optimize-parse.ts`
+remains as a second line of defence, and is what the unit tests exercise.
+
+Because it speaks the Chat Completions shape, `OPENAI_BASE_URL` can point at
+Azure OpenAI, OpenRouter, or a local server without code changes.
 
 ## Notes on this environment
 

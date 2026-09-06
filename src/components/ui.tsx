@@ -20,6 +20,12 @@ export function FieldError({ message }: { message?: string }) {
   return <p className="mt-1 text-xs text-red-600 dark:text-red-400">{message}</p>;
 }
 
+/**
+ * The hint sits outside the <label> and is wired up with aria-describedby, so
+ * the field's accessible name stays just "Prompt" rather than "Prompt the text
+ * you'll copy and reuse" — a name is for identifying the field, a description
+ * for explaining it. Pair with aria-describedby={`${id}-hint`} on the input.
+ */
 export function Label({
   htmlFor,
   children,
@@ -30,10 +36,16 @@ export function Label({
   hint?: string;
 }) {
   return (
-    <label htmlFor={htmlFor} className="mb-1.5 block text-sm font-medium">
-      {children}
-      {hint && <span className="ml-2 font-normal text-muted">{hint}</span>}
-    </label>
+    <div className="mb-1.5 flex items-baseline gap-2">
+      <label htmlFor={htmlFor} className="block text-sm font-medium">
+        {children}
+      </label>
+      {hint && (
+        <span id={`${htmlFor}-hint`} className="text-sm text-muted">
+          {hint}
+        </span>
+      )}
+    </div>
   );
 }
 

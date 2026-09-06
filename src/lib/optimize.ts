@@ -3,11 +3,15 @@ import { OptimizerError, parseOptimizerResponse } from "./optimize-parse";
 
 export { OptimizerError, parseOptimizerResponse };
 
-const API_URL = "https://api.anthropic.com/v1/messages";
-const API_VERSION = "2023-06-01";
+/**
+ * Uses the Chat Completions shape rather than the newer Responses API: both are
+ * supported, and this one is also what Azure OpenAI, OpenRouter, and most local
+ * servers speak, so OPENAI_BASE_URL can point almost anywhere.
+ */
+const BASE_URL = process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1";
 
-/** Override with OPTIMIZER_MODEL if you want a cheaper or stronger model. */
-export const OPTIMIZER_MODEL = process.env.OPTIMIZER_MODEL ?? "claude-sonnet-5";
+/** Override with OPTIMIZER_MODEL for a cheaper or stronger model. */
+export const OPTIMIZER_MODEL = process.env.OPTIMIZER_MODEL ?? "gpt-5.6-terra";
 
 export type OptimizeResult = {
   optimized: string;
@@ -29,17 +33,38 @@ Hard rules:
 - Keep roughly the original language and register. If the prompt is in Chinese, stay in Chinese.
 - If the prompt is already strong, make minimal changes and say so.
 
-Respond with JSON only, no prose around it, in exactly this shape:
-{"optimized": "the rewritten prompt", "changes": ["short description of each change"]}`;
+Put the rewritten prompt in "optimized" and one short line per change in "changes".`;
+
+/**
+ * Strict structured output: the API enforces this schema, so a malformed or
+ * truncated-into-invalid response can't reach the parser. `strict` requires
+ * every property listed in `required` and additionalProperties: false.
+ */
+const RESPONSE_SCHEMA = {
+  type: "object",
+  properties: {
+    optimized: {
+      type: "string",
+      description: "The rewritten prompt, ready to use as-is.",
+    },
+    changes: {
+      type: "array",
+      items: { type: "string" },
+      description: "One short description per change made.",
+    },
+  },
+  required: ["optimized", "changes"],
+  additionalProperties: false,
+} as const;
 
 export async function optimizePrompt(
   content: string,
   instructions?: string,
 ): Promise<OptimizeResult> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new OptimizerError(
-      "No ANTHROPIC_API_KEY is set, so prompts can't be optimized yet. Add one to .env.local and restart the server.",
+      "No OPENAI_API_KEY is set, so prompts can't be optimized yet. Add one to .env.local and restart the server.",
       501,
       true,
     );
@@ -51,18 +76,27 @@ export async function optimizePrompt(
 
   let response: Response;
   try {
-    response = await fetch(API_URL, {
+    response = await fetch(`${BASE_URL}/chat/completions`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": API_VERSION,
+        authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         model: OPTIMIZER_MODEL,
-        max_tokens: 4096,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: "user", content: userMessage }],
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: userMessage },
+        ],
+        max_completion_tokens: 4096,
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "optimized_prompt",
+            schema: RESPONSE_SCHEMA,
+            strict: true,
+          },
+        },
       }),
       // Don't leave a form spinning forever if the API stalls.
       signal: AbortSignal.timeout(60_000),
@@ -77,14 +111,21 @@ export async function optimizePrompt(
   if (!response.ok) {
     if (response.status === 401) {
       throw new OptimizerError(
-        "The model API rejected the API key. Check ANTHROPIC_API_KEY.",
+        "The model API rejected the API key. Check OPENAI_API_KEY.",
         401,
+        true,
+      );
+    }
+    if (response.status === 404) {
+      throw new OptimizerError(
+        `The model API doesn't recognize "${OPTIMIZER_MODEL}". Set OPTIMIZER_MODEL to one your account can use.`,
+        404,
         true,
       );
     }
     if (response.status === 429) {
       throw new OptimizerError(
-        "Rate limited by the model API. Try again shortly.",
+        "Rate limited by the model API, or you're out of quota. Try again shortly.",
         429,
       );
     }
@@ -92,13 +133,35 @@ export async function optimizePrompt(
   }
 
   const payload = (await response.json()) as {
-    content?: { type: string; text?: string }[];
+    choices?: {
+      finish_reason?: string;
+      message?: { content?: string | null; refusal?: string | null };
+    }[];
   };
-  const text = (payload.content ?? [])
-    .filter((block) => block.type === "text")
-    .map((block) => block.text ?? "")
-    .join("");
 
+  const choice = payload.choices?.[0];
+  if (!choice) {
+    throw new OptimizerError("The model returned an empty response");
+  }
+
+  // A safety refusal comes back in its own field, with content null.
+  if (choice.message?.refusal) {
+    throw new OptimizerError(
+      `The model declined to rewrite this prompt: ${choice.message.refusal}`,
+      422,
+    );
+  }
+
+  // Hitting the token ceiling truncates mid-JSON; say so rather than letting
+  // the parser report vague garbage.
+  if (choice.finish_reason === "length") {
+    throw new OptimizerError(
+      "The rewrite was cut off because the prompt is very long. Try optimizing a shorter section.",
+      413,
+    );
+  }
+
+  const text = choice.message?.content ?? "";
   if (!text.trim()) {
     throw new OptimizerError("The model returned an empty response");
   }

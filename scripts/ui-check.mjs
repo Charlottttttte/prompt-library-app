@@ -124,10 +124,9 @@ await page.screenshot({ path: `${SHOTS}/03-tag-filter.png`, fullPage: true });
 console.log("\nCreate");
 check("GET /prompts/new returns 200", (await goto("/prompts/new")) === 200);
 await page.getByLabel("Title").fill("Playwright test prompt");
-await page
-  .getByLabel("Prompt", { exact: false })
-  .first()
-  .fill("A prompt created by the browser check.");
+await page.getByLabel("Prompt", { exact: true }).fill(
+  "A prompt created by the browser check.",
+);
 await page.getByLabel("New tags").fill("automated");
 await page.screenshot({ path: `${SHOTS}/04-new-form.png`, fullPage: true });
 await page.getByRole("button", { name: "Save prompt" }).click();
@@ -183,7 +182,7 @@ await optimizeMessage.waitFor({ timeout: 30000 });
 const optimizeText = await optimizeMessage.innerText();
 check(
   "without a key it says so instead of failing silently",
-  optimizeText.includes("ANTHROPIC_API_KEY"),
+  optimizeText.includes("OPENAI_API_KEY"),
   JSON.stringify(optimizeText.slice(0, 80)),
 );
 await page.screenshot({ path: `${SHOTS}/08-optimize.png`, fullPage: true });
@@ -192,10 +191,9 @@ await page.screenshot({ path: `${SHOTS}/08-optimize.png`, fullPage: true });
 console.log("\nEdit and version history");
 await page.getByRole("link", { name: "Edit" }).click();
 await page.waitForLoadState("networkidle");
-await page
-  .getByLabel("Prompt", { exact: false })
-  .first()
-  .fill("An edited prompt, which should create a second version.");
+await page.getByLabel("Prompt", { exact: true }).fill(
+  "An edited prompt, which should create a second version.",
+);
 await page.getByRole("button", { name: "Save changes" }).click();
 await page.waitForURL(/\/prompts\/[0-9a-f-]{36}$/, { timeout: 15000 });
 check(
@@ -228,6 +226,12 @@ page.once("dialog", (dialog) => dialog.accept());
 await page.getByRole("button", { name: "Delete" }).click();
 await page.waitForURL(`${BASE}/`, { timeout: 15000 });
 check("deleting returns to the library", true);
+// The library streams behind a loading boundary — wait for the real list.
+await page.waitForFunction(
+  () => document.querySelectorAll("main ul > li").length > 0,
+  null,
+  { timeout: 10000 },
+);
 const remaining = await page.locator("main ul > li").count();
 check("the deleted prompt is gone", remaining === 4, `got ${remaining}`);
 
