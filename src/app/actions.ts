@@ -11,6 +11,7 @@ import {
   deletePrompt,
   findOrCreateCategory,
   revertPromptToVersion,
+  updateCategory,
   updateFolder,
   updatePrompt,
 } from "@/lib/mutations";
@@ -197,6 +198,30 @@ export async function deleteFolderAction(formData: FormData) {
 /* -------------------------------------------------------------------------- */
 /* Categories                                                                  */
 /* -------------------------------------------------------------------------- */
+
+export async function renameCategoryAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  try {
+    const id = String(formData.get("id") ?? "");
+    const name = String(formData.get("name") ?? "").trim();
+    if (!name) return { ok: false, error: "Tag name is required" };
+    await updateCategory(id, { name });
+  } catch (error) {
+    return toFormState(error);
+  }
+
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+export async function recolorCategoryAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  const color = String(formData.get("color") ?? "").trim() || null;
+  await updateCategory(id, { color });
+  revalidatePath("/", "layout");
+}
 
 export async function deleteCategoryAction(formData: FormData) {
   const id = String(formData.get("id") ?? "");

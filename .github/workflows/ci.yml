@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: prompt_library
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/prompt_library
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - run: npm ci
+
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build
+
+      - name: Apply migrations
+        run: npm run db:migrate
+
+      - name: Schema tests
+        run: npm run test:schema
+
+      - name: Optimizer unit tests
+        run: npm run test:optimizer
+
+      # test:schema leaves fixtures behind, but the API suite below asserts
+      # against an otherwise-empty library, so start it from a clean table set.
+      - name: Reset database
+        run: psql "$DATABASE_URL" -c "TRUNCATE prompt_versions, prompt_categories, prompts, categories, folders RESTART IDENTITY CASCADE;"
+
+      - name: Install Playwright's Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Start dev server
+        run: nohup npm run dev > dev-server.log 2>&1 &
+
+      - name: Wait for dev server
+        run: |
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:3000/ > /dev/null && exit 0
+            sleep 1
+          done
+          echo "Dev server never came up:"; cat dev-server.log; exit 1
+
+      - name: API tests
+        run: npm run test:api
+
+      # test:ui expects the exact fixtures scripts/seed.ts creates (four
+      # prompts, specific folder nesting and tag counts), so reset then reseed.
+      - name: Reset and seed database
+        run: |
+          psql "$DATABASE_URL" -c "TRUNCATE prompt_versions, prompt_categories, prompts, categories, folders RESTART IDENTITY CASCADE;"
+          npm run db:seed
+
+      - name: UI tests
+        run: npm run test:ui
+
+      - name: Dev server log
+        if: always()
+        run: cat dev-server.log || true

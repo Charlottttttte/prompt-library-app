@@ -211,8 +211,17 @@ await page.screenshot({ path: `${SHOTS}/06-history.png`, fullPage: true });
 
 // --- Restore ---------------------------------------------------------------
 await page.getByRole("button", { name: "Restore" }).first().click();
-await page.waitForLoadState("networkidle");
-await page.waitForTimeout(800);
+// A fixed sleep here raced the server action's refresh under real network
+// latency (e.g. a hosted Postgres) — poll for the actual content instead.
+await page
+  .waitForFunction(
+    () =>
+      document.querySelector("article > section pre")?.textContent?.trim() ===
+      "A prompt created by the browser check.",
+    null,
+    { timeout: 10000 },
+  )
+  .catch(() => {});
 const restored = await page.locator("article > section pre").first().innerText();
 check(
   "restoring an old version brings its text back",

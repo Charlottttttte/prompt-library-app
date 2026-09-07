@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { FolderSidebar } from "@/components/folder-sidebar";
+import { TagManager } from "@/components/tag-manager";
 import { buttonStyles } from "@/components/ui";
-import { getFolderTree } from "@/lib/queries";
+import { getFolderTree, listCategories } from "@/lib/queries";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -12,13 +13,17 @@ export const metadata: Metadata = {
 };
 
 async function Sidebar() {
-  const { tree, rootPromptCount, totalPromptCount } = await getFolderTree();
+  const [{ tree, rootPromptCount, totalPromptCount }, categories] =
+    await Promise.all([getFolderTree(), listCategories()]);
   return (
-    <FolderSidebar
-      tree={tree}
-      rootPromptCount={rootPromptCount}
-      totalPromptCount={totalPromptCount}
-    />
+    <>
+      <FolderSidebar
+        tree={tree}
+        rootPromptCount={rootPromptCount}
+        totalPromptCount={totalPromptCount}
+      />
+      <TagManager categories={categories} />
+    </>
   );
 }
 

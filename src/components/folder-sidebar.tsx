@@ -7,6 +7,7 @@ import type { FolderTreeNode } from "@/lib/queries";
 import {
   createFolderAction,
   deleteFolderAction,
+  renameFolderAction,
   type FormState,
 } from "@/app/actions";
 import { buttonStyles, inputStyles } from "./ui";
@@ -41,8 +42,63 @@ function FolderRow({
   buildHref: (id: string | null) => string;
 }) {
   const [expanded, setExpanded] = useState(true);
+  const [renaming, setRenaming] = useState(false);
   const hasChildren = node.children.length > 0;
   const isActive = activeId === node.id;
+
+  const [renameState, renameFormAction, renamePending] = useActionState<
+    FormState,
+    FormData
+  >(async (prev, formData) => {
+    const result = await renameFolderAction(prev, formData);
+    if (result?.ok) setRenaming(false);
+    return result;
+  }, null);
+
+  if (renaming) {
+    return (
+      <li>
+        <form
+          action={renameFormAction}
+          className="flex flex-col gap-1"
+          style={{ paddingLeft: `${depth * 12}px` }}
+        >
+          <input type="hidden" name="id" value={node.id} />
+          <div className="flex items-center gap-1">
+            <input
+              name="name"
+              defaultValue={node.name}
+              autoFocus
+              required
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setRenaming(false);
+              }}
+              className={inputStyles}
+            />
+            <button
+              type="submit"
+              disabled={renamePending}
+              className={buttonStyles.primary}
+            >
+              Save
+            </button>
+            <button
+              type="button"
+              onClick={() => setRenaming(false)}
+              className={buttonStyles.secondary}
+            >
+              Cancel
+            </button>
+          </div>
+          {renameState?.error && (
+            <p className="text-xs text-red-600 dark:text-red-400">
+              {renameState.error}
+            </p>
+          )}
+        </form>
+      </li>
+    );
+  }
 
   return (
     <li>
@@ -80,6 +136,16 @@ function FolderRow({
         <span className="shrink-0 text-xs text-muted tabular-nums">
           {node.promptCount > 0 ? node.promptCount : ""}
         </span>
+
+        <button
+          type="button"
+          onClick={() => setRenaming(true)}
+          title="Rename folder"
+          aria-label={`Rename folder ${node.name}`}
+          className="hidden h-5 w-5 shrink-0 items-center justify-center rounded text-muted transition hover:bg-surface hover:text-foreground group-hover:flex"
+        >
+          ✎
+        </button>
 
         <form action={deleteFolderAction} className="shrink-0">
           <input type="hidden" name="id" value={node.id} />
